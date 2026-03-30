@@ -1,0 +1,6 @@
+# PyBullet simulation requirements for Unitree Go2
+# Install with: pip install -r requirements.txt
+
+pybullet>=3.2.5
+numpy>=1.21.0
+matplotlib>=3.5.0
