@@ -1,105 +1,109 @@
-# Unitree Go2 Bipedal Walking & Backflip Simulation
+# Unitree Go2 Robot Simulation 🤖
 
-**Safe simulation environment for testing advanced quadruped robot behaviors before deploying to real hardware.**
+A safe simulation environment for testing advanced robot behaviors before deploying to real hardware.
 
-![Status](https://img.shields.io/badge/status-experimental-orange)
-![Python](https://img.shields.io/badge/python-3.7%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+## What This Project Does
 
-## ⚠️ Safety Warning
+This project simulates a **Unitree Go2 quadruped robot** (a four-legged robot dog) and lets you test cool movements like:
 
-**ALWAYS test behaviors in simulation before attempting on real hardware!**
+- 🚶 **Bipedal Walking** - Standing and walking on just the back two legs (like a person!)
+- 🤸 **Backflips** - Full backward rotation in the air
+- 🦘 **Jumping** - Dynamic explosive movements
+- 🧍 **Advanced Standing** - Balanced poses and transitions
 
-This project includes high-risk behaviors (bipedal walking, backflips) that can damage your robot or cause injury if not executed properly. Please:
+**Why simulation?** Testing these behaviors on a real robot without practice is dangerous and could break the $3,000+ robot. This lets you experiment safely!
 
-- ✅ Test thoroughly in simulation first
-- ✅ Use safety harness when testing on real robot
-- ✅ Work with experienced supervisor
-- ✅ Have emergency stop ready
-- ✅ Use soft landing surfaces
-- ❌ Never attempt backflips without proper safety measures
+## Project Structure
 
-## 🎯 Project Goals
+```
+JailBreakDoggo1/
+├── simulation/
+│   ├── models/
+│   │   └── go2_urdf_generator.py      # Creates the robot model
+│   ├── controllers/
+│   │   ├── kinematics.py              # Calculates joint angles
+│   │   └── behaviors.py               # Robot behaviors (walk, flip, etc.)
+│   ├── utils/
+│   │   └── safety_monitor.py          # Monitors for dangerous movements
+│   ├── examples/
+│   │   ├── test_bipedal_only.py       # Test walking on two legs
+│   │   └── test_backflip_only.py      # Test backflips
+│   └── go2_simulator.py               # Main simulator
+├── requirements.txt                    # Python packages needed
+└── README.md                          # This file!
+```
 
-This simulation helps you:
+## How It Works
 
-1. **Visualize** advanced robot behaviors before running them on hardware
-2. **Test** bipedal walking and dynamic movements safely
-3. **Understand** the joint angles and physics involved
-4. **Develop** behaviors that can be adapted to the real Unitree Go2 SDK
+### 1. **Physics Simulation (PyBullet)**
+- Uses PyBullet physics engine to simulate real-world physics
+- Gravity, friction, collisions, and forces all work like reality
+- Runs at 240 Hz (240 times per second) for accuracy
 
-## 🚀 Features
+### 2. **Robot Model (URDF)**
+- Robot is defined in URDF format (XML file describing robot structure)
+- Includes body, 4 legs, 12 joints (3 per leg: hip, thigh, calf)
+- Based on real Unitree Go2 specifications
 
-### Implemented Behaviors
+### 3. **Inverse Kinematics (IK)**
+- Calculates joint angles needed to place feet at desired positions
+- Uses trigonometry and the Law of Cosines
+- Answers: "To put the foot HERE, what angles do I need?"
 
-- ✅ **Standing**: Stable quadruped standing pose
-- ✅ **Bipedal Transition**: Smooth transition to standing on hind legs
-- ✅ **Bipedal Walking**: Walking on two hind legs with alternating gait
-- ✅ **Jump Preparation**: Crouch and prepare for explosive movements
-- ✅ **Backflip**: Full backward rotation with tuck and landing
+### 4. **Behaviors**
+- High-level actions broken into phases
+- Example: Bipedal transition has 4 phases (crouch → shift weight → lift front legs → stabilize)
+- Each behavior updates 240 times per second
 
-### Safety Features
+### 5. **Safety Monitoring**
+- Checks joint limits (can't bend joints too far)
+- Monitors body tilt (detects if robot is falling)
+- Checks height (detects if robot has collapsed)
+- Emergency stop if anything goes wrong
 
-- 🛡️ Real-time joint limit monitoring
-- 🛡️ Body orientation checking (detects falls)
-- 🛡️ Velocity and torque limiting
-- 🛡️ Emergency stop functionality
-- 🛡️ Comprehensive safety warnings
-
-## 📦 Installation
+## Installation
 
 ### Requirements
+- **Python 3.7+**
+- **PyBullet** (physics engine)
+- **NumPy** (math library)
+- **Matplotlib** (graphing)
 
-- Python 3.7 or higher
-- PyBullet (free, open-source physics engine)
-- NumPy
+### Quick Setup
 
-### Setup
-
-1. **Clone this repository**:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/nwrenn27-sketch/Robot-code.git
-   cd Robot-code
+   cd JailBreakDoggo1
    ```
 
-2. **Install dependencies**:
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Test the installation**:
+3. **Run a test:**
    ```bash
-   python simulation/go2_simulator.py
+   # Test bipedal walking (safer to start with)
+   python simulation/examples/test_bipedal_only.py
+
+   # Test backflip (advanced!)
+   python simulation/examples/test_backflip_only.py
    ```
 
-You should see a 3D visualization window with the robot performing the full behavior sequence!
+## Usage Examples
 
-## 🎮 Usage
-
-### Quick Start - Full Demo
-
-Run the complete demonstration (bipedal walking + backflip):
-
+### Run Full Demo (Walking + Backflip)
 ```bash
 python simulation/go2_simulator.py
 ```
 
-### Test Individual Behaviors
-
-**Bipedal Walking Only** (safer to start with):
+### Test Bipedal Walking Only
 ```bash
 python simulation/examples/test_bipedal_only.py
 ```
 
-**Backflip Only** (advanced):
-```bash
-python simulation/examples/test_backflip_only.py
-```
-
-### Custom Behavior Script
-
-Create your own test by combining behaviors:
-
+### Create Custom Behavior
 ```python
 from simulation.go2_simulator import Go2Simulator
 from simulation.controllers.behaviors import *
@@ -107,143 +111,136 @@ from simulation.controllers.behaviors import *
 # Create simulator
 sim = Go2Simulator(gui=True, real_time=True)
 
-# Create custom behavior sequence
+# Define custom behavior sequence
 behaviors = [
     StandingBehavior(sim.robot_id, height=0.35),
     BipedalTransition(sim.robot_id, duration=3.0),
-    # Add more behaviors here...
+    BipedalWalking(sim.robot_id, step_duration=1.5, num_steps=4),
 ]
 
-# Run behaviors
+# Run behaviors with safety monitoring
 sim.run_behavior_sequence(behaviors, safety_checks=True)
 ```
 
-## 📁 Project Structure
+## Key Concepts Explained
+
+### Inverse Kinematics (IK)
+**Problem:** "I want the foot at position (x, y, z). What joint angles do I need?"
+
+**Solution:** Use trigonometry to work backwards from desired position to joint angles.
 
 ```
-JailBreakDoggo1/
-├── simulation/
-│   ├── models/
-│   │   ├── go2_urdf_generator.py    # Generates robot model
-│   │   └── unitree_go2.urdf         # Generated robot description
-│   ├── controllers/
-│   │   ├── kinematics.py            # Inverse kinematics solver
-│   │   └── behaviors.py             # Behavior implementations
-│   ├── utils/
-│   │   └── safety_monitor.py        # Safety checking system
-│   ├── examples/
-│   │   ├── test_bipedal_only.py     # Bipedal walking test
-│   │   └── test_backflip_only.py    # Backflip test
-│   └── go2_simulator.py             # Main simulator
-├── requirements.txt
-└── README.md
+Forward Kinematics:  Joint Angles → Foot Position (easy)
+Inverse Kinematics:  Foot Position → Joint Angles (hard!)
 ```
 
-## 🎓 Understanding the Code
+### PD Control
+**P (Proportional):** How aggressively to reach the target
+- Higher kp = stiffer, reaches target faster
+- Lower kp = softer, slower motion
 
-### Key Components
-
-#### 1. **Kinematics (`kinematics.py`)**
-Calculates joint angles needed to place feet at desired positions.
-
-```python
-from simulation.controllers.kinematics import QuadrupedIK
-
-ik = QuadrupedIK()
-# Get joint angles for standing at 0.35m height
-angles = ik.standing_pose(height=0.35)
-```
-
-#### 2. **Behaviors (`behaviors.py`)**
-High-level behaviors broken into phases.
-
-Each behavior has an `update(dt)` method called each simulation step:
-
-```python
-class MyBehavior(BehaviorController):
-    def update(self, dt):
-        # Your behavior logic here
-        joint_angles = self.ik.standing_pose(0.35)
-        self.set_joint_angles(joint_angles)
-        return "Status message"
-```
-
-#### 3. **Safety Monitor (`safety_monitor.py`)**
-Monitors robot state and prevents dangerous movements.
-
-```python
-safety = SafetyMonitor(robot_id)
-is_safe = safety.check_all()  # Check all safety constraints
-```
+**D (Derivative):** How much to resist oscillation
+- Higher kd = more damping, less bouncing
+- Lower kd = less damping, might oscillate
 
 ### Behavior Phases
+Complex behaviors are broken into phases that execute over time:
 
-#### Bipedal Transition
-1. **Crouch** (30% of duration): Lower body to shift weight
-2. **Shift Weight** (30%): Move center of mass over hind legs
-3. **Lift Front** (25%): Raise front legs off ground
-4. **Stand** (15%): Stabilize in bipedal stance
+**Bipedal Transition Example:**
+1. **Crouch** (30% of time) - Lower body to shift weight
+2. **Shift Weight** (30%) - Move center of mass over hind legs
+3. **Lift Front** (25%) - Raise front legs off ground
+4. **Stand** (15%) - Stabilize in bipedal stance
 
-#### Backflip
-1. **Jump** (15%): Explosive leg extension + upward force
-2. **Rotate** (35%): Tuck legs + apply rotation torque
-3. **Extend** (30%): Extend legs for landing
-4. **Land** (20%): Absorb impact with high damping
+## Safety Features
 
-## 🔧 Adapting to Real Robot
+⚠️ **IMPORTANT:** Always test in simulation before real robot!
 
-The simulation uses joint positions and velocities similar to the Unitree SDK. To adapt behaviors to real hardware:
+The simulator includes safety monitoring:
 
-### 1. Get Joint Angles from Simulation
+- ✅ **Joint Limit Checking** - Prevents joints from exceeding safe angles
+- ✅ **Body Orientation Monitoring** - Detects if robot is falling over
+- ✅ **Height Checking** - Detects if robot has collapsed
+- ✅ **Velocity Limiting** - Prevents dangerous speeds
+- ✅ **Emergency Stop** - Immediately stops all motion if unsafe
 
+## Understanding the Code
+
+All code files have **detailed line-by-line comments** explaining:
+- What each line does
+- Why it's there
+- How the math works
+- What values mean in the real world
+
+### Example Comment Style:
 ```python
-# In simulation
-state = sim.get_robot_state()
-joint_angles = state['joint_states']
-
-# This gives you angles for each joint:
-# {'FR_hip_joint': {'position': 0.1, 'velocity': 0.0}, ...}
+# Calculate hip angle using arctangent
+# arctan2(z, y) gives us the angle in the y-z plane
+# This determines how far the leg swings outward from the body
+hip_angle = np.arctan2(z, y_adjusted)
 ```
 
-### 2. Map to Unitree SDK Commands
+Pick any random line and you'll understand what it's doing!
 
-```python
-# Example mapping (you'll need to work with your teacher on this)
-from unitree_sdk import Robot  # Hypothetical - check actual SDK
+## Technical Details
 
-robot = Robot()
+### Simulation Parameters
+- **Physics Rate:** 240 Hz (4.17ms per step)
+- **Gravity:** -9.81 m/s² (Earth gravity)
+- **Robot Mass:** ~15 kg
+- **Leg Segments:** Hip: 8cm, Thigh: 21.3cm, Calf: 21.3cm
 
-# Set joint position for front right hip
-robot.set_joint_position('FR_hip', angle)
-```
+### Joint Limits (approximate)
+- **Hip:** -46° to +46° (sideways movement)
+- **Thigh:** -86° to +172° (forward/backward)
+- **Calf:** -155° to -46° (knee bends backward only)
 
-### 3. Key Differences to Consider
+### Forces in Backflip
+- **Jump Force:** 500 N upward (robot weighs ~147 N)
+- **Rotation Torque:** -150 N⋅m backward pitch
+- **Duration:** 2 seconds total (jump → rotate → land)
 
-| Simulation | Real Robot |
-|------------|------------|
-| Perfect sensors | Sensor noise/delay |
-| Instant torque | Motor response time |
-| Simplified friction | Complex contact dynamics |
-| No battery limits | Battery affects performance |
+## Learning Resources
 
-**Always start with slower, gentler movements on real hardware!**
+### Understanding the Physics
+- [PyBullet Documentation](https://pybullet.org/)
+- [Inverse Kinematics Explained](https://robotacademy.net.au/)
 
-## 🐛 Troubleshooting
+### Robot Specifications
+- [Unitree Go2 Official](https://www.unitree.com/)
+
+### Mathematics Used
+- **Trigonometry:** sin, cos, arctan, arctan2
+- **Law of Cosines:** For IK calculations
+- **Linear Interpolation:** For smooth transitions
+
+## Real Robot Deployment
+
+⚠️ **Before trying on real hardware:**
+
+1. ✅ Test thoroughly in simulation
+2. ✅ Start with simple behaviors (standing, gentle movements)
+3. ✅ Use safety harness for bipedal/backflip attempts
+4. ✅ Have emergency stop ready
+5. ✅ Test on soft surface (foam mat, grass)
+6. ✅ Work with experienced supervisor
+7. ✅ Gradually increase difficulty
+
+**DO NOT jump straight to backflips on real hardware!** 🚨
+
+## Troubleshooting
 
 ### Robot Falls Over in Simulation
-
-- **Cause**: Transition too fast or unstable pose
-- **Fix**: Increase behavior duration or adjust joint angles
+- **Cause:** Transition too fast or unstable pose
+- **Fix:** Increase behavior duration or adjust joint angles
 
 ### "CRITICAL: Body tilt too extreme"
-
-- **Cause**: Safety system detected potential fall
-- **Fix**: This is working as intended! Review the behavior that caused it.
+- **Cause:** Safety system detected potential fall
+- **Fix:** This is working correctly! Review what caused it.
 
 ### Import Errors
-
 ```bash
-# Make sure you're in the project root directory
+# Make sure you're in project root
 cd JailBreakDoggo1
 
 # Try running with python -m
@@ -251,69 +248,53 @@ python -m simulation.go2_simulator
 ```
 
 ### Robot Model Doesn't Load
-
 ```bash
-# Regenerate the URDF
+# Regenerate URDF
 python simulation/models/go2_urdf_generator.py
 ```
 
-## 📚 Learning Resources
+## Contributing
 
-### PyBullet
-- [PyBullet Quickstart](https://docs.google.com/document/d/10sXEhzFRSnvFcl3XxNGhnD4N2SedqwdAvK3dsihxVUA/)
-- [PyBullet Documentation](https://pybullet.org/)
-
-### Quadruped Robotics
-- [Unitree Robotics Official Site](https://www.unitree.com/)
-- [Inverse Kinematics Tutorial](https://robotacademy.net.au/)
-
-### Safety Practices
-- Always work with supervision
-- Test incrementally (don't jump to backflips!)
-- Document what works and what doesn't
-
-## 🤝 Contributing
-
-This is an educational project! Contributions welcome:
+Contributions welcome! This is an educational project.
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-behavior`)
-3. Commit your changes (`git commit -m 'Add amazing behavior'`)
-4. Push to branch (`git push origin feature/amazing-behavior`)
-5. Open a Pull Request
+2. Create feature branch (`git checkout -b feature/cool-behavior`)
+3. Add detailed comments to new code
+4. Test in simulation
+5. Commit changes (`git commit -m 'Add cool behavior'`)
+6. Push to branch (`git push origin feature/cool-behavior`)
+7. Open Pull Request
 
-## ⚖️ License
+## License
 
-MIT License - see LICENSE file for details.
+MIT License - See LICENSE file for details
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- **Unitree Robotics** for creating the Go2 robot
-- **PyBullet** team for the excellent physics engine
-- Your **teacher** for supporting this ambitious project!
+- **Unitree Robotics** - For creating the Go2 robot
+- **PyBullet Team** - For the excellent physics engine
+- Educational project for learning robotics and simulation
 
-## 📞 Support
+## Contact
 
-Having issues? Found a bug?
-
-1. Check the [Troubleshooting](#-troubleshooting) section
-2. Open an issue on GitHub
-3. Ask your teacher/supervisor for guidance
-
-## ⚠️ Final Safety Reminder
-
-**This simulation is a tool for learning and testing, but:**
-
-- Simulated physics ≠ Real physics
-- Start with simple behaviors on real robot
-- Use proper safety equipment
-- Work with experienced supervision
-- Have emergency stop always ready
-
-**Your safety and the robot's safety come first!** 🛡️
+- **GitHub:** [nwrenn27-sketch/Robot-code](https://github.com/nwrenn27-sketch/Robot-code)
+- **Issues:** Report bugs or ask questions via GitHub Issues
 
 ---
 
-**Good luck with your bipedal robot adventures!** 🤖🦘
+## Quick Start Summary
 
-*Built with ❤️ for learning and safe robotics experimentation*
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Run a test
+python simulation/examples/test_bipedal_only.py
+
+# 3. Watch the robot walk on two legs!
+# 4. Close the window when done
+```
+
+**Remember: Simulation first, real robot later!** 🛡️
+
+Built with ❤️ for safe robotics experimentation and learning.
