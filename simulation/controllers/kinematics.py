@@ -8,8 +8,16 @@ This is essential for controlling where the robot's feet go, which is needed for
 - Standing on hind legs
 - Jumping
 - Backflips
+
+WHAT IS INVERSE KINEMATICS (IK)?
+---------------------------------
+Forward Kinematics: "If I set these joint angles, where will the foot end up?"
+Inverse Kinematics: "Where do I set the joints to put the foot at this position?"
+
+IK is the reverse problem - much harder to solve!
 """
 
+# Import numpy - needed for math operations like sin, cos, arctan, sqrt, etc.
 import numpy as np
 
 
@@ -30,9 +38,11 @@ class LegIK:
             thigh_length: Length of thigh link (meters)
             calf_length: Length of calf link (meters)
         """
-        self.hip_length = hip_length
-        self.thigh_length = thigh_length
-        self.calf_length = calf_length
+        # Store the lengths of each leg segment
+        # These are the "bones" of the robot leg
+        self.hip_length = hip_length        # 8 cm - distance from body to thigh joint
+        self.thigh_length = thigh_length    # 21.3 cm - upper leg bone
+        self.calf_length = calf_length      # 21.3 cm - lower leg bone
 
     def solve(self, target_pos, hip_sign=1):
         """
@@ -46,53 +56,86 @@ class LegIK:
             tuple: (hip_angle, thigh_angle, calf_angle) in radians
                    Returns None if target is unreachable
         """
+        # Unpack the target position into x, y, z coordinates
+        # x = forward/backward, y = left/right, z = up/down
         x, y, z = target_pos
 
         # ===== HIP JOINT (abduction/adduction) =====
-        # This moves the leg sideways
+        # The hip moves the leg sideways (away from or toward the body)
+
         # We need to account for the hip length offset
+        # The hip joint is not at the body center - it's offset to the side
+        # Subtract (or add for left side) the hip length to get the actual position
         y_adjusted = y - (hip_sign * self.hip_length)
 
         # Calculate hip angle using arctangent
-        # This determines how far the leg swings outward
+        # arctan2(z, y) gives us the angle in the y-z plane
+        # This determines how far the leg swings outward from the body
         hip_angle = np.arctan2(z, y_adjusted)
 
         # ===== THIGH and CALF JOINTS (2D IK in sagittal plane) =====
-        # Now we solve for thigh and calf in the plane defined by the leg
+        # Now we solve for thigh and calf in a 2D plane
+        # Think of looking at the leg from the side - it's now a 2D problem!
 
         # Distance from hip joint to target in the y-z plane
+        # This is how far "sideways" the foot needs to be from the hip
+        # sqrt(a² + b²) is the Pythagorean theorem - finding the hypotenuse
         L = np.sqrt(y_adjusted**2 + z**2)
 
-        # Distance from thigh joint to target in the x-z plane
+        # Distance from thigh joint to target
+        # Now we're in a 2D plane with x (forward) and L (sideways)
+        # D is the straight-line distance from thigh joint to foot
         D = np.sqrt(x**2 + L**2)
 
-        # Check if target is reachable
+        # Check if target is reachable - can the leg actually reach there?
+        # Maximum reach: if we fully extend both thigh and calf in a straight line
         max_reach = self.thigh_length + self.calf_length
+        # Minimum reach: if we fold the leg completely (one bone minus the other)
         min_reach = abs(self.thigh_length - self.calf_length)
 
+        # If the target is too far away OR too close, we can't reach it
         if D > max_reach or D < min_reach:
-            # Target is too far or too close - unreachable
+            # Target is unreachable - return None to indicate failure
             return None
 
-        # Use law of cosines to find calf angle
-        # cos(angle) = (a² + b² - c²) / (2ab)
+        # ===== LAW OF COSINES =====
+        # We have a triangle: thigh -> calf -> target
+        # We know all three side lengths, so we can find the angles!
+        # Law of cosines: cos(C) = (a² + b² - c²) / (2ab)
+
+        # Find the calf angle (knee angle)
+        # This is the angle between the thigh and calf bones
         cos_calf = (self.thigh_length**2 + self.calf_length**2 - D**2) / \
                    (2 * self.thigh_length * self.calf_length)
 
         # Clamp to [-1, 1] to avoid numerical errors
+        # Sometimes floating point math gives us -1.0000001, which would crash arccos
+        # np.clip ensures the value stays in the valid range for arccos
         cos_calf = np.clip(cos_calf, -1.0, 1.0)
 
-        # Calf angle (negative because it bends backwards)
+        # Calculate the calf angle
+        # arccos gives us the angle, then subtract from π because knee bends backward
+        # The negative sign is because the knee bends in the negative direction
         calf_angle = -(np.pi - np.arccos(cos_calf))
 
-        # Calculate thigh angle
-        alpha = np.arctan2(-x, L)  # Angle to target
+        # Calculate thigh angle (hip-to-knee angle)
+        # This has two parts: direction to target + angle adjustment
+
+        # alpha: angle from thigh joint pointing toward the target
+        # We use -x because x-axis points forward, but we measure from vertical
+        alpha = np.arctan2(-x, L)
+
+        # beta: angle adjustment based on the triangle geometry
+        # This accounts for the calf pushing back on the thigh
         beta = np.arccos(
             (self.thigh_length**2 + D**2 - self.calf_length**2) /
             (2 * self.thigh_length * D)
         )
+
+        # Final thigh angle is the sum of these two components
         thigh_angle = alpha + beta
 
+        # Return all three angles as a tuple
         return hip_angle, thigh_angle, calf_angle
 
     def forward_kinematics(self, hip_angle, thigh_angle, calf_angle, hip_sign=1):
@@ -135,22 +178,27 @@ class QuadrupedIK:
 
     def __init__(self):
         """Initialize IK solvers for all legs."""
+        # Create one IK solver that we'll use for all four legs
+        # (They all have the same dimensions)
         self.leg_ik = LegIK()
 
         # Define leg positions relative to body center
+        # These are where each hip joint is located on the body
         # FR = Front Right, FL = Front Left, RR = Rear Right, RL = Rear Left
         self.leg_offsets = {
-            'FR': np.array([0.18, -0.13, 0]),
-            'FL': np.array([0.18, 0.13, 0]),
-            'RR': np.array([-0.18, -0.13, 0]),
-            'RL': np.array([-0.18, 0.13, 0])
+            'FR': np.array([0.18, -0.13, 0]),   # Front right: 18cm forward, 13cm to right
+            'FL': np.array([0.18, 0.13, 0]),    # Front left: 18cm forward, 13cm to left
+            'RR': np.array([-0.18, -0.13, 0]),  # Rear right: 18cm back, 13cm to right
+            'RL': np.array([-0.18, 0.13, 0])    # Rear left: 18cm back, 13cm to left
         }
 
+        # Signs for mirroring left and right legs
+        # Right legs use +1, left legs use -1
         self.leg_signs = {
-            'FR': 1,
-            'FL': -1,
-            'RR': 1,
-            'RL': -1
+            'FR': 1,   # Right side
+            'FL': -1,  # Left side
+            'RR': 1,   # Right side
+            'RL': -1   # Left side
         }
 
     def solve_leg(self, leg_name, foot_pos_body_frame):
@@ -236,33 +284,41 @@ class QuadrupedIK:
         Returns:
             dict: Joint angles for bipedal stance
         """
+        # Create an empty dictionary to store angles for all legs
         joint_angles = {}
 
         # Front legs - lifted and tucked
+        # When standing on hind legs, the front legs don't touch the ground
         for leg_name in ['FR', 'FL']:
-            # Pull feet up and back toward body
-            offset = self.leg_offsets[leg_name]
+            # Pull feet up and back toward body (like a person standing upright)
+            offset = self.leg_offsets[leg_name]  # Where this leg attaches to body
             foot_pos = np.array([
-                offset[0] - 0.15,  # Pull back
-                offset[1],
-                -0.1  # Lift up significantly
+                offset[0] - 0.15,  # Pull back 15cm from normal position
+                offset[1],         # Keep same left/right position
+                -0.1  # Lift up significantly - only 10cm below body (very high!)
             ])
+            # Try to solve IK for this foot position
             angles = self.solve_leg(leg_name, foot_pos)
+            # If IK fails (unreachable position), use a safe tucked position
             if angles is None:
-                angles = (0, 2.0, -2.5)  # Tucked position
+                angles = (0, 2.0, -2.5)  # Tucked position (hip, thigh, calf)
             joint_angles[leg_name] = angles
 
         # Rear legs - supporting full weight
+        # These legs bear all the robot's weight when bipedal
         for leg_name in ['RR', 'RL']:
             offset = self.leg_offsets[leg_name]
             foot_pos = np.array([
-                offset[0] + 0.05,  # Slightly forward for balance
-                offset[1],
-                -height  # Lower to ground
+                offset[0] + 0.05,  # Slightly forward for balance (helps prevent tipping back)
+                offset[1],         # Keep same left/right position
+                -height  # Negative height (feet are below body)
             ])
+            # Solve IK for standing position
             angles = self.solve_leg(leg_name, foot_pos)
+            # If IK fails, use a safe extended position
             if angles is None:
                 angles = (0, 1.2, -2.0)  # Extended standing position
             joint_angles[leg_name] = angles
 
+        # Return all the angles for all 4 legs
         return joint_angles

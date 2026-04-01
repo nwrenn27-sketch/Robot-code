@@ -9,16 +9,32 @@ This provides a safe environment to test:
 - Other advanced movements
 
 SAFETY FIRST: Always test in simulation before trying on real robot!
+
+HOW THE SIMULATOR WORKS:
+------------------------
+1. Initialize PyBullet (the physics engine)
+2. Load the ground plane and robot model
+3. Set up physics parameters (gravity, time step, etc.)
+4. Run behaviors in a loop, stepping the simulation forward
+5. Monitor safety constraints throughout
 """
 
+# Import PyBullet - the physics simulation library
 import pybullet as p
+# Import PyBullet's built-in data (includes ground plane, etc.)
 import pybullet_data
+# Import numpy for math operations
 import numpy as np
+# Import time for delays (to run at real-time speed)
 import time
+# Import os for file path operations
 import os
+# Import sys to modify Python's import path
 import sys
 
 # Add parent directory to path for imports
+# This allows us to import modules from the parent directory
+# __file__ is this script's path, we go up two levels then add to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from simulation.utils.safety_monitor import SafetyMonitor
@@ -51,44 +67,63 @@ class Go2Simulator:
             gui: Show 3D visualization window (True) or run headless (False)
             real_time: Run at real-time speed (True) or as fast as possible (False)
         """
-        self.gui = gui
-        self.real_time = real_time
+        # Store settings
+        self.gui = gui                  # Whether to show the 3D window
+        self.real_time = real_time      # Whether to run at real-time speed or max speed
 
-        # Connect to PyBullet
+        # Connect to PyBullet physics engine
         if gui:
+            # Connect with GUI (opens a 3D visualization window)
             self.client = p.connect(p.GUI)
-            # Configure camera for better view
-            p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)  # Hide GUI controls
+
+            # Configure camera for better viewing angle
+            # Hide the GUI controls (sliders and buttons) for cleaner view
+            p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+
+            # Set camera position and angle
             p.resetDebugVisualizerCamera(
-                cameraDistance=1.5,
-                cameraYaw=45,
-                cameraPitch=-20,
-                cameraTargetPosition=[0, 0, 0.3]
+                cameraDistance=1.5,              # 1.5 meters away from target
+                cameraYaw=45,                    # Rotated 45° horizontally
+                cameraPitch=-20,                 # Angled down 20°
+                cameraTargetPosition=[0, 0, 0.3] # Looking at point 0.3m above origin
             )
         else:
+            # Connect without GUI (headless mode - faster, no visualization)
             self.client = p.connect(p.DIRECT)
 
+        # Print confirmation message with the connection ID
         print(f"✓ PyBullet connected (client ID: {self.client})")
 
-        # Set up physics
+        # Set up physics parameters
+        # Set gravity: [x, y, z] where -9.81 m/s² is Earth's gravity pulling down
         p.setGravity(0, 0, -9.81)
-        p.setTimeStep(1/240)  # 240 Hz physics simulation
-        p.setRealTimeSimulation(0)  # We'll step manually for control
 
-        # Load ground plane
+        # Set physics time step: 1/240 seconds = 0.00417 seconds per step
+        # Higher frequency = more accurate but slower simulation
+        p.setTimeStep(1/240)  # 240 Hz is typical for robotics simulation
+
+        # Disable real-time simulation mode
+        # We want to manually step the simulation for precise control
+        p.setRealTimeSimulation(0)  # 0 = off, we call p.stepSimulation() manually
+
+        # Load ground plane (flat surface for robot to walk on)
+        # Tell PyBullet where to find its built-in models
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        # Load the plane.urdf file (infinite flat ground)
         self.ground_id = p.loadURDF("plane.urdf")
 
-        # Generate and load robot
+        # Generate and load the robot model
         self.robot_id = self._load_robot()
 
-        # Initialize safety monitor
+        # Initialize safety monitoring system
+        # max_body_tilt=60° allows for the backflip (temporarily exceeds normal limits)
         self.safety = SafetyMonitor(self.robot_id, max_body_tilt=60.0)
 
-        # Behavior management
-        self.current_behavior = None
-        self.behavior_queue = []
+        # Behavior management variables
+        self.current_behavior = None    # The behavior currently executing
+        self.behavior_queue = []        # Queue of behaviors to run in sequence
 
+        # Print initialization summary
         print("✓ Simulator initialized")
         print(f"  - Real-time mode: {real_time}")
         print(f"  - GUI enabled: {gui}")
@@ -205,49 +240,71 @@ class Go2Simulator:
         Returns:
             bool: True if behavior completed safely
         """
+        # Store reference to the current behavior
         self.current_behavior = behavior
+
+        # Reset the behavior to its initial state (time=0, is_complete=False)
         behavior.reset()
 
-        dt = 1/240  # Time step (240 Hz)
-        max_duration = 30.0  # Safety timeout
-        elapsed = 0
+        # Set up timing
+        dt = 1/240  # Time step: 1/240 seconds (matches physics simulation rate)
+        max_duration = 30.0  # Safety timeout: stop after 30 seconds no matter what
+        elapsed = 0  # Track total time elapsed
 
+        # Main behavior loop - runs until behavior completes OR timeout
+        # Conditions: keep looping while behavior is NOT complete AND time hasn't run out
         while not behavior.is_complete and elapsed < max_duration:
-            # Update behavior
+            # Update behavior for this time step
+            # behavior.update() calculates what the robot should do RIGHT NOW
+            # and returns a status message describing what's happening
             status = behavior.update(dt)
 
-            # Print status (update same line)
+            # Print status on the same line (using \r to return to start of line)
+            # end='' prevents newline, flush=True forces immediate display
+            # Extra spaces "      " clear any leftover text from previous longer messages
             print(f"\r  {status}                    ", end='', flush=True)
 
-            # Run safety checks
+            # Run safety checks if enabled
             if safety_checks:
+                # Check all safety constraints (joint limits, body tilt, height, etc.)
                 is_safe = self.safety.check_all()
 
+                # If any safety check failed
                 if not is_safe:
+                    # Print a newline (we were on the same line for status)
                     print("\n")
+                    # Print detailed safety warnings and errors
                     self.safety.print_status(verbose=True)
                     print("⚠️  Safety violation detected!")
 
-                    # For critical errors, stop immediately
+                    # For critical errors (falling, extreme tilt), stop immediately
                     if self.safety.critical_errors:
+                        # Emergency stop: set all joint velocities to zero
                         self.safety.emergency_stop()
+                        # Return False to indicate failure
                         return False
 
-            # Step simulation
+            # Step the physics simulation forward by one time step (1/240 second)
+            # This calculates forces, collisions, movement, etc.
             p.stepSimulation()
 
-            # Real-time delay if enabled
+            # If real-time mode is enabled, add a delay to match real time
+            # Without this, simulation runs as fast as your computer can handle
             if self.real_time:
-                time.sleep(dt)
+                time.sleep(dt)  # Sleep for 1/240 second to match real time
 
+            # Increment elapsed time
             elapsed += dt
 
-        print()  # New line after status updates
+        # Print a newline after all the status updates (we were using \r)
+        print()
 
+        # Check if we hit the timeout
         if elapsed >= max_duration:
             print(f"⚠️  Behavior timed out after {max_duration}s")
-            return False
+            return False  # Failure
 
+        # If we got here, the behavior completed successfully within the time limit
         return True
 
     def get_robot_state(self):
